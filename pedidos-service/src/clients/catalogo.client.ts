@@ -9,13 +9,6 @@ function catalogUrl(): string {
   return url;
 }
 
-function codigoPorStatus(status: number): string {
-  if (status === 400) return "DADOS_INVALIDOS";
-  if (status === 404) return "PRODUTO_NAO_ENCONTRADO";
-  if (status === 409) return "ESTOQUE_INSUFICIENTE";
-  return "CATALOGO_INDISPONIVEL";
-}
-
 export async function reservarEstoque(
   produtoId: number,
   quantidade: number
@@ -29,30 +22,26 @@ export async function reservarEstoque(
       body: JSON.stringify({ quantidade })
     });
   } catch {
-    // fetch rejeitou: sem resposta HTTP (serviço fora, porta errada, rede)
     throw new AppError("Catálogo indisponível", 502, "CATALOGO_INDISPONIVEL");
   }
 
-  // fetch NÃO lança erro em 404/409: precisa checar resposta.ok
+  // fetch não lança erro em 404/409: precisa checar resposta.ok
   if (!resposta.ok) {
-    if (resposta.status >= 500) {
-      throw new AppError("Catálogo indisponível", 502, "CATALOGO_INDISPONIVEL");
+    if (resposta.status === 400) {
+      throw new AppError("Dados do pedido são inválidos", 400, "DADOS_INVALIDOS");
     }
-    const mensagens: Record<number, string> = {
-      400: "Dados do pedido são inválidos",
-      404: "Produto não encontrado",
-      409: "Estoque insuficiente"
-    };
-    throw new AppError(
-      mensagens[resposta.status] ?? "Falha ao reservar estoque",
-      resposta.status,
-      codigoPorStatus(resposta.status)
-    );
+    if (resposta.status === 404) {
+      throw new AppError("Produto não encontrado", 404, "PRODUTO_NAO_ENCONTRADO");
+    }
+    if (resposta.status === 409) {
+      throw new AppError("Estoque insuficiente", 409, "ESTOQUE_INSUFICIENTE");
+    }
+    throw new AppError("Catálogo indisponível", 502, "CATALOGO_INDISPONIVEL");
   }
 
   try {
     return (await resposta.json()) as ReservaEstoque;
   } catch {
-    throw new AppError("Resposta inválida do Catálogo", 502, "CATALOGO_INDISPONIVEL");
+    throw new AppError("Catálogo indisponível", 502, "CATALOGO_INDISPONIVEL");
   }
 }

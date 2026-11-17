@@ -1,0 +1,21 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// produtoId é só uma referência de domínio (NÃO é foreign key):
+// a tabela de produtos pertence ao Catálogo, em outro banco.
+model Pedido {
+  id            Int      @id @default(autoincrement())
+  produtoId     Int
+  quantidade    Int
+  clienteEmail  String
+  precoUnitario Decimal  @db.Decimal(10, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  status        String   @default("CONFIRMADO")
+  criadoEm      DateTime @default(now())
+}

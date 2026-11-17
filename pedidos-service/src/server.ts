@@ -1,37 +1,19 @@
 import "dotenv/config";
-import express, { NextFunction, Request, Response } from "express";
+import express from "express";
 import pedidosRoutes from "./routes/pedidos.routes";
-import { AppError } from "./errors/AppError";
+import { errorHandler } from "./errors/handler";
 
-if (!process.env.CATALOG_URL) {
-  console.error("CATALOG_URL não definida. Copie .env.example para .env");
-  process.exit(1);
+for (const variavel of ["CATALOG_URL", "DATABASE_URL"]) {
+  if (!process.env[variavel]) {
+    console.error(`${variavel} não definida. Copie .env.example para .env`);
+    process.exit(1);
+  }
 }
 
 const app = express();
 app.use(express.json());
 app.use(pedidosRoutes);
-
-// Nunca devolver stack trace ao cliente
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  if (error instanceof AppError) {
-    return res.status(error.status).json({
-      mensagem: error.mensagem,
-      codigo: error.codigo
-    });
-  }
-  if (error instanceof SyntaxError) {
-    return res.status(400).json({
-      mensagem: "Dados do pedido são inválidos",
-      codigo: "DADOS_INVALIDOS"
-    });
-  }
-  console.error(error);
-  return res.status(500).json({
-    mensagem: "Erro interno do servidor",
-    codigo: "ERRO_INTERNO"
-  });
-});
+app.use(errorHandler);
 
 const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, () => {

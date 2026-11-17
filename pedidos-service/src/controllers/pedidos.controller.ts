@@ -11,17 +11,21 @@ export async function criar(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export function listar(_req: Request, res: Response) {
-  return res.status(200).json(pedidoService.listarPedidos());
+export async function listar(_req: Request, res: Response, next: NextFunction) {
+  try {
+    return res.status(200).json(await pedidoService.listarPedidos());
+  } catch (error) {
+    next(error);
+  }
 }
 
-export function buscarPorId(req: Request, res: Response, next: NextFunction) {
+export async function buscarPorId(req: Request, res: Response, next: NextFunction) {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
+    if (!Number.isInteger(id) || id <= 0) {
       throw new AppError("Pedido não encontrado", 404, "PEDIDO_NAO_ENCONTRADO");
     }
-    return res.status(200).json(pedidoService.buscarPedidoPorId(id));
+    return res.status(200).json(await pedidoService.buscarPedidoPorId(id));
   } catch (error) {
     next(error);
   }

@@ -1,16 +1,34 @@
 import { reservarEstoque } from "../clients/catalogo.client";
-import { gerarId, pedidos } from "../data/pedidos";
 import { AppError } from "../errors/AppError";
-import { CriarPedidoInput, Pedido } from "../types/pedido";
+import { pedidosRepository } from "../repositories/pedidos.repository";
+import { CriarPedidoInput } from "../types/pedido";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type PedidoDb = NonNullable<
+  Awaited<ReturnType<typeof pedidosRepository.buscarPorId>>
+>;
+
+// Decimal vira number para manter o contrato REST da Parte 2
+function paraResposta(p: PedidoDb) {
+  return {
+    id: p.id,
+    produtoId: p.produtoId,
+    quantidade: p.quantidade,
+    clienteEmail: p.clienteEmail,
+    precoUnitario: Number(p.precoUnitario),
+    total: Number(p.total),
+    status: p.status,
+    criadoEm: p.criadoEm
+  };
+}
 
 function dadosInvalidos(): AppError {
   return new AppError("Dados do pedido são inválidos", 400, "DADOS_INVALIDOS");
 }
 
-export async function criarPedido(input: CriarPedidoInput): Promise<Pedido> {
-  // 1. VALIDAR (nada de rede nem push antes disso)
+export async function criarPedido(input: CriarPedidoInput) {
+  // 1. VALIDAR
   const { produtoId, quantidade, clienteEmail } = input ?? {};
 
   if (!Number.isInteger(produtoId) || (produtoId as number) <= 0) {
@@ -26,37 +44,37 @@ export async function criarPedido(input: CriarPedidoInput): Promise<Pedido> {
   const idProduto = produtoId as number;
   const qtd = quantidade as number;
 
-  // 2. RESERVAR (se falhar, lança AppError e o pedido NÃO é criado)
+  // Banco de Pedidos fora? Falha ANTES de reservar, para não "queimar" estoque à toa
+  await pedidosRepository.verificarConexao();
+
+  // 2. RESERVAR (se falhar, nada é gravado em pedidos_db)
   const reserva = await reservarEstoque(idProduto, qtd);
 
-  // 3. CALCULAR com o preço confiável vindo do Catálogo
-  const total = reserva.precoUnitario * qtd;
+  // 3. CALCULAR com o preço confiável do Catálogo
+  const precoUnitario = Number(reserva.precoUnitario);
+  const total = precoUnitario * qtd;
 
-  // 4. PERSISTIR somente depois da reserva confirmada
-  const novoPedido: Pedido = {
-    id: gerarId(),
+  // 4. PERSISTIR no PostgreSQL somente depois da reserva confirmada
+  const pedido = await pedidosRepository.criar({
     produtoId: idProduto,
     quantidade: qtd,
-    precoUnitario: reserva.precoUnitario,
-    total,
     clienteEmail: clienteEmail.trim(),
-    status: "confirmado",
-    notificacaoStatus: "nao_enviada",
-    criadoEm: new Date().toISOString()
-  };
+    precoUnitario,
+    total
+  });
 
-  pedidos.push(novoPedido);
-  return novoPedido;
+  return paraResposta(pedido);
 }
 
-export function listarPedidos(): Pedido[] {
-  return pedidos;
+export async function listarPedidos() {
+  const pedidos = await pedidosRepository.listar();
+  return pedidos.map(paraResposta);
 }
 
-export function buscarPedidoPorId(id: number): Pedido {
-  const pedido = pedidos.find((p) => p.id === id);
+export async function buscarPedidoPorId(id: number) {
+  const pedido = await pedidosRepository.buscarPorId(id);
   if (!pedido) {
     throw new AppError("Pedido não encontrado", 404, "PEDIDO_NAO_ENCONTRADO");
   }
-  return pedido;
+  return paraResposta(pedido);
 }
